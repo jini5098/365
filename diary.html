@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>감정 날씨 일기</title>
+<style>
+  :root{
+    --paper:#f4efe6;        /* 따뜻한 종이색 */
+    --paper-2:#eee7da;
+    --ink:#4a4238;          /* 글자 */
+    --ink-soft:#8a8172;     /* 보조 글자 */
+    --line:#e2d9c8;         /* 경계선 */
+    --card:#fbf8f1;         /* 카드 바탕 */
+    --accent:#c98a5e;       /* 포근한 테라코타 */
+    --accent-soft:#f0e3d6;
+    --shadow:0 2px 0 rgba(120,104,80,.10), 0 6px 16px rgba(120,104,80,.10);
+    --shadow-sm:0 1px 0 rgba(120,104,80,.08), 0 3px 8px rgba(120,104,80,.08);
+
+    /* 감정-날씨 색 (플랫 솔리드) */
+    --c-sunny:#e8b84b;
+    --c-partly:#e7a86a;
+    --c-cloudy:#9fb0b8;
+    --c-rain:#6f93b8;
+    --c-storm:#b56a62;
+    --c-snow:#a9a7cf;
+    --c-fog:#b7b1a3;
+    --empty:#ece5d7;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"Apple SD Gothic Neo","Noto Sans KR","Malgun Gothic",sans-serif;
+    background-color:var(--paper);
+    color:var(--ink);
+    line-height:1.55;
+    -webkit-font-smoothing:antialiased;
+    overflow-x:hidden;
+    min-height:100vh;
+  }
+  /* 미세한 종이질감 오버레이 */
+  body::before{
+    content:"";
+    position:fixed; inset:0; z-index:0; pointer-events:none;
+    opacity:.5;
+    background-image:
+      radial-gradient(rgba(140,120,90,.05) 1px, transparent 1px),
+      radial-gradient(rgba(140,120,90,.04) 1px, transparent 1px);
+    background-size:5px 5px, 11px 11px;
+    background-position:0 0, 3px 4px;
+  }
+  .wrap{position:relative; z-index:1; max-width:460px; margin:0 auto; padding:20px 16px 48px;}
+
+  header.top{text-align:center; margin:6px 0 18px;}
+  header.top .cloud-mark{display:block; margin:0 auto 6px;}
+  header.top h1{font-size:22px; margin:0; letter-spacing:-.4px; font-weight:800;}
+  header.top p{margin:4px 0 0; font-size:13px; color:var(--ink-soft);}
+
+  .card{
+    background:var(--card);
+    border:1px solid var(--line);
+    border-radius:18px;
+    box-shadow:var(--shadow);
+    padding:18px 16px;
+    margin-bottom:16px;
+  }
+  .card h2{font-size:15px; margin:0 0 12px; font-weight:800; letter-spacing:-.2px;}
+  .card h2 .sub{font-weight:500; color:var(--ink-soft); font-size:12px; margin-left:6px;}
+
+  /* 오늘 날짜 배지 */
+  .today-date{font-size:13px; color:var(--ink-soft); margin:0 0 14px; display:flex; align-items:center; gap:7px;}
+  .today-date b{color:var(--accent); font-weight:700;}
+
+  /* 감정 선택 그리드 */
+  .picker{display:grid; grid-template-columns:repeat(4,1fr); gap:9px;}
+  .mood-btn{
+    border:1.5px solid var(--line);
+    background:var(--card);
+    border-radius:14px;
+    padding:9px 4px 8px;
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    cursor:pointer; transition:transform .08s ease, border-color .12s, background .12s;
+    box-shadow:var(--shadow-sm);
+  }
+  .mood-btn:active{transform:translateY(1px) scale(.98);}
+  .mood-btn .ic{width:38px; height:38px; display:block;}
+  .mood-btn .nm{font-size:11px; font-weight:700; color:var(--ink);}
+  .mood-btn .fe{font-size:10px; color:var(--ink-soft); margin-top:-2px;}
+  .mood-btn.sel{border-color:var(--accent); background:var(--accent-soft);}
+  .mood-btn.sel .fe{color:var(--accent);}
+
+  /* 메모 */
+  .memo-wrap{margin-top:14px;}
+  textarea.memo{
+    width:100%; border:1.5px solid var(--line); border-radius:12px;
+    background:var(--paper); color:var(--ink);
+    font-family:inherit; font-size:14px; padding:11px 12px; resize:none;
+    min-height:62px; line-height:1.5;
+  }
+  textarea.memo:focus{outline:none; border-color:var(--accent);}
+  .memo-count{text-align:right; font-size:11px; color:var(--ink-soft); margin-top:4px;}
+
+  .save-row{display:flex; gap:9px; margin-top:12px;}
+  button.btn{
+    font-family:inherit; font-size:14px; font-weight:700;
+    border-radius:12px; padding:12px 14px; cursor:pointer; border:1.5px solid var(--line);
+    background:var(--card); color:var(--ink); box-shadow:var(--shadow-sm);
+    transition:transform .08s ease, background .12s;
+  }
+  button.btn:active{transform:translateY(1px);}
+  button.btn.primary{background:var(--accent); border-color:var(--accent); color:#fff; flex:1;}
+  button.btn.ghost{color:var(--ink-soft);}
+  button.btn:disabled{opacity:.45; cursor:not-allowed;}
+
+  .saved-note{font-size:12.5px; color:var(--accent); margin-top:10px; min-height:16px; font-weight:600;}
+
+  /* 달 네비 */
+  .month-nav{display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;}
+  .month-nav .mlabel{font-size:15px; font-weight:800;}
+  .navbtn{
+    width:34px; height:34px; border-radius:10px; border:1.5px solid var(--line);
+    background:var(--card); display:flex; align-items:center; justify-content:center;
+    cursor:pointer; box-shadow:var(--shadow-sm); color:var(--ink);
+  }
+  .navbtn:active{transform:translateY(1px);}
+  .navbtn svg{display:block;}
+
+  /* 달력 */
+  .cal-dow{display:grid; grid-template-columns:repeat(7,1fr); gap:6px; margin-bottom:7px;}
+  .cal-dow span{text-align:center; font-size:11px; color:var(--ink-soft); font-weight:600;}
+  .cal-dow span.sun{color:#c07a6e;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:6px;}
+  .cell{
+    aspect-ratio:1/1; border-radius:11px; position:relative;
+    display:flex; align-items:center; justify-content:center;
+    border:1.5px solid transparent; cursor:default;
+    background:var(--empty);
+    font-size:11px; color:var(--ink-soft);
+  }
+  .cell.empty{background:transparent; border:none;}
+  .cell.has{cursor:pointer; box-shadow:var(--shadow-sm);}
+  .cell .daynum{position:absolute; top:3px; left:5px; font-size:9.5px; font-weight:700; color:rgba(255,255,255,.92);}
+  .cell.noentry .daynum{color:var(--ink-soft);}
+  .cell .mini{width:20px; height:20px;}
+  .cell.today{border-color:var(--accent);}
+  .cell.sel{outline:2.5px solid var(--accent); outline-offset:1px;}
+
+  /* 미리보기 */
+  .preview{
+    margin-top:12px; border-top:1px dashed var(--line); padding-top:12px;
+    display:none;
+  }
+  .preview.show{display:block;}
+  .preview .pv-head{display:flex; align-items:center; gap:10px;}
+  .preview .pv-ic{width:34px; height:34px; flex:none;}
+  .preview .pv-date{font-size:13px; font-weight:800;}
+  .preview .pv-feel{font-size:12px; color:var(--ink-soft);}
+  .preview .pv-memo{margin-top:9px; font-size:13.5px; color:var(--ink); background:var(--paper); border-radius:10px; padding:10px 12px; white-space:pre-wrap; word-break:break-word;}
+  .preview .pv-nomemo{margin-top:9px; font-size:12.5px; color:var(--ink-soft); font-style:italic;}
+  .preview .pv-edit{margin-top:11px;}
+
+  /* 패턴 */
+  .pat-empty{font-size:13px; color:var(--ink-soft); text-align:center; padding:8px 0;}
+  .pat-list{display:flex; flex-direction:column; gap:9px;}
+  .pat-row{display:flex; align-items:center; gap:10px;}
+  .pat-row .pic{width:26px; height:26px; flex:none;}
+  .pat-row .pbar-wrap{flex:1; background:var(--empty); border-radius:8px; height:16px; overflow:hidden;}
+  .pat-row .pbar{height:100%; border-radius:8px; min-width:3px;}
+  .pat-row .pnum{font-size:12px; color:var(--ink-soft); flex:none; width:46px; text-align:right; font-weight:600;}
+  .pat-chips{display:flex; flex-wrap:wrap; gap:7px; margin-top:4px;}
+
+  .tools{display:flex; gap:9px; justify-content:center; margin-top:4px;}
+  .tools button{font-size:12.5px; padding:9px 14px;}
+
+  footer{text-align:center; font-size:11px; color:var(--ink-soft); margin-top:22px;}
+
+  /* 작은 토스트 */
+  .toast{
+    position:fixed; left:50%; bottom:26px; transform:translateX(-50%) translateY(20px);
+    background:var(--ink); color:var(--paper); font-size:13px; font-weight:600;
+    padding:10px 18px; border-radius:999px; box-shadow:var(--shadow);
+    opacity:0; pointer-events:none; transition:opacity .22s, transform .22s; z-index:50;
+    max-width:86vw; text-align:center;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  @media (max-width:360px){
+    .picker{grid-template-columns:repeat(4,1fr); gap:7px;}
+    .mood-btn .ic{width:34px;height:34px;}
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <!-- 머리말용 구름 마크 (도형 조합) -->
+    <svg class="cloud-mark" width="44" height="30" viewBox="0 0 44 30" aria-hidden="true">
+      <circle cx="16" cy="16" r="9" fill="#e8b84b"/>
+      <circle cx="27" cy="18" r="11" fill="#fbf8f1" stroke="#e2d9c8" stroke-width="1.5"/>
+      <circle cx="16" cy="20" r="8" fill="#fbf8f1" stroke="#e2d9c8" stroke-width="1.5"/>
+      <rect x="13" y="21" width="22" height="7" rx="3.5" fill="#fbf8f1" stroke="#e2d9c8" stroke-width="1.5"/>
+    </svg>
+    <h1>감정 날씨 일기</h1>
+    <p>오늘 마음은 어떤 날씨인가요?</p>
+  </header>
+
+  <!-- 오늘 기록 -->
+  <section class="card">
+    <div class="today-date">오늘은 <b id="todayLabel">—</b> 이에요.</div>
+    <h2>오늘의 마음 날씨 <span class="sub">하나만 골라요</span></h2>
+    <div class="picker" id="picker"></div>
+
+    <div class="memo-wrap">
+      <textarea class="memo" id="memo" maxlength="140" placeholder="한 줄 메모를 남겨도 좋아요 (선택)"></textarea>
+      <div class="memo-count"><span id="memoCount">0</span>/140</div>
+    </div>
+
+    <div class="save-row">
+      <button class="btn primary" id="saveBtn" disabled>오늘 기록 저장</button>
+    </div>
+    <div class="saved-note" id="savedNote"></div>
+  </section>
+
+  <!-- 달력 -->
+  <section class="card">
+    <div class="month-nav">
+      <button class="navbtn" id="prevM" aria-label="이전 달">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M10 3 L5 8 L10 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+      <div class="mlabel" id="monthLabel">—</div>
+      <button class="navbtn" id="nextM" aria-label="다음 달">
+        <svg width="16" height="16" viewBox="0 0 16 16"><path d="M6 3 L11 8 L6 13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      </button>
+    </div>
+    <div class="cal-dow">
+      <span class="sun">일</span><span>월</span><span>화</span><span>수</span><span>목</span><span>금</span><span>토</span>
+    </div>
+    <div class="cal-grid" id="calGrid"></div>
+
+    <div class="preview" id="preview">
+      <div class="pv-head">
+        <span class="pv-ic" id="pvIc"></span>
+        <div>
+          <div class="pv-date" id="pvDate"></div>
+          <div class="pv-feel" id="pvFeel"></div>
+        </div>
+      </div>
+      <div id="pvMemoWrap"></div>
+      <div class="pv-edit" id="pvEditWrap"></div>
+    </div>
+  </section>
+
+  <!-- 패턴 -->
+  <section class="card">
+    <h2>이번 달 마음 날씨 <span class="sub" id="patSub"></span></h2>
+    <div id="patBody"></div>
+  </section>
+
+  <!-- 도구 -->
+  <section class="card" style="padding:14px 16px;">
+    <div class="tools">
+      <button class="btn ghost" id="exportBtn">내보내기</button>
+      <button class="btn ghost" id="resetBtn">전체 초기화</button>
+    </div>
+  </section>
+
+  <footer>마음은 날마다 바뀌어요. 어떤 날씨든 괜찮아요. 🌿</footer>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---- 감정-날씨 정의 ----
+  var MOODS = [
+    {id:"sunny",  name:"맑음",   feel:"좋음",        color:"#e8b84b"},
+    {id:"partly", name:"구름조금", feel:"그럭저럭",    color:"#e7a86a"},
+    {id:"cloudy", name:"흐림",   feel:"울적",        color:"#9fb0b8"},
+    {id:"rain",   name:"비",     feel:"힘듦",        color:"#6f93b8"},
+    {id:"storm",  name:"폭풍",   feel:"화남·스트레스", color:"#b56a62"},
+    {id:"snow",   name:"눈",     feel:"차분·고요",    color:"#a9a7cf"},
+    {id:"fog",    name:"안개",   feel:"멍함",        color:"#b7b1a3"}
+  ];
+  var MOOD_MAP = {};
+  MOODS.forEach(function(m){ MOOD_MAP[m.id]=m; });
+
+  var STORE_KEY = "emotion_weather_diary_v1";
+
+  // ---- SVG 아이콘 (모든 오브젝트를 단순 도형 조합으로) ----
+  // size 인자로 크기 조절. 통짜 금지 — circle/rect/line 조합.
+  function icon(id, size){
+    var s = size||38;
+    var c = MOOD_MAP[id] ? MOOD_MAP[id].color : "#ccc";
+    var cloud = "#fbf8f1", cloudLine = "#cfc6b4";
+    var head = '<svg width="'+s+'" height="'+s+'" viewBox="0 0 40 40" aria-hidden="true">';
+    var body = "";
+    switch(id){
+      case "sunny": // 해 = 원 + 광선(선들)
+        body =
+          '<g stroke="'+c+'" stroke-width="2.4" stroke-linecap="round">'+
+            '<line x1="20" y1="3" x2="20" y2="8"/>'+
+            '<line x1="20" y1="32" x2="20" y2="37"/>'+
+            '<line x1="3" y1="20" x2="8" y2="20"/>'+
+            '<line x1="32" y1="20" x2="37" y2="20"/>'+
+            '<line x1="8" y1="8" x2="11.5" y2="11.5"/>'+
+            '<line x1="28.5" y1="28.5" x2="32" y2="32"/>'+
+            '<line x1="32" y1="8" x2="28.5" y2="11.5"/>'+
+            '<line x1="11.5" y1="28.5" x2="8" y2="32"/>'+
+          '</g>'+
+          '<circle cx="20" cy="20" r="8.5" fill="'+c+'"/>';
+        break;
+      case "partly": // 해 일부 + 구름
+        body =
+          '<circle cx="15" cy="14" r="7" fill="'+c+'"/>'+
+          '<g stroke="'+c+'" stroke-width="2" stroke-linecap="round">'+
+            '<line x1="15" y1="2" x2="15" y2="6"/>'+
+            '<line x1="3" y1="14" x2="7" y2="14"/>'+
+            '<line x1="6" y1="5" x2="9" y2="8"/>'+
+          '</g>'+
+          '<circle cx="22" cy="24" r="7" fill="'+cloud+'" stroke="'+cloudLine+'" stroke-width="1.5"/>'+
+          '<circle cx="31" cy="25" r="6" fill="'+cloud+'" stroke="'+cloudLine+'" stroke-width="1.5"/>'+
+          '<rect x="19" y="26" width="16" height="6" rx="3" fill="'+cloud+'" stroke="'+cloudLine+'" stroke-width="1.5"/>';
+        break;
+      case "cloudy": // 구름 두 덩이
+        body =
+          '<circle cx="24" cy="15" r="7" fill="#c3ccd1"/>'+
+          '<circle cx="31" cy="18" r="5" fill="#c3ccd1"/>'+
+          '<circle cx="14" cy="20" r="8" fill="'+c+'"/>'+
+          '<circle cx="24" cy="22" r="8" fill="'+c+'"/>'+
+          '<rect x="12" y="22" width="22" height="8" rx="4" fill="'+c+'"/>';
+        break;
+      case "rain": // 구름 + 빗방울(선/원)
+        body =
+          '<circle cx="15" cy="15" r="8" fill="'+c+'"/>'+
+          '<circle cx="26" cy="16" r="7" fill="'+c+'"/>'+
+          '<rect x="13" y="13" width="18" height="9" rx="4.5" fill="'+c+'"/>'+
+          '<g stroke="#8fb0d4" stroke-width="2.4" stroke-linecap="round">'+
+            '<line x1="15" y1="27" x2="13" y2="33"/>'+
+            '<line x1="22" y1="27" x2="20" y2="34"/>'+
+            '<line x1="29" y1="27" x2="27" y2="33"/>'+
+          '</g>';
+        break;
+      case "storm": // 먹구름 + 번개(삼각/다각)
+        body =
+          '<circle cx="15" cy="15" r="8" fill="'+c+'"/>'+
+          '<circle cx="26" cy="16" r="7" fill="'+c+'"/>'+
+          '<rect x="13" y="13" width="18" height="9" rx="4.5" fill="'+c+'"/>'+
+          '<polygon points="21,24 15,32 20,32 17,38 26,28 21,28" fill="#e8b84b"/>';
+        break;
+      case "snow": // 구름 + 눈송이(원들)
+        body =
+          '<circle cx="15" cy="15" r="8" fill="'+c+'"/>'+
+          '<circle cx="26" cy="16" r="7" fill="'+c+'"/>'+
+          '<rect x="13" y="13" width="18" height="9" rx="4.5" fill="'+c+'"/>'+
+          '<g fill="#f2f1fa">'+
+            '<circle cx="15" cy="29" r="2"/>'+
+            '<circle cx="22" cy="33" r="2"/>'+
+            '<circle cx="29" cy="29" r="2"/>'+
+          '</g>';
+        break;
+      case "fog": // 흐릿한 가로 띠
+        body =
+          '<g stroke="'+c+'" stroke-width="3.4" stroke-linecap="round">'+
+            '<line x1="7" y1="12" x2="33" y2="12"/>'+
+            '<line x1="5" y1="18" x2="30" y2="18"/>'+
+            '<line x1="10" y1="24" x2="35" y2="24"/>'+
+            '<line x1="6" y1="30" x2="28" y2="30"/>'+
+          '</g>';
+        break;
+      default:
+        body = '<circle cx="20" cy="20" r="9" fill="#ccc"/>';
+    }
+    return head + body + '</svg>';
+  }
+
+  // ---- 저장소 ----
+  function loadAll(){
+    try{
+      var raw = localStorage.getItem(STORE_KEY);
+      return raw ? JSON.parse(raw) : {};
+    }catch(e){ return {}; }
+  }
+  function saveAll(data){
+    try{ localStorage.setItem(STORE_KEY, JSON.stringify(data)); return true; }
+    catch(e){ return false; }
+  }
+
+  // ---- 날짜 유틸 ----
+  function pad(n){ return (n<10?"0":"")+n; }
+  function keyOf(y,m,d){ return y+"-"+pad(m+1)+"-"+pad(d); } // m: 0-based
+  function todayKey(){
+    var t=new Date();
+    return keyOf(t.getFullYear(), t.getMonth(), t.getDate());
+  }
+  var DOW_KR = ["일","월","화","수","목","금","토"];
+  function prettyDate(key){
+    var p = key.split("-");
+    var dt = new Date(+p[0], +p[1]-1, +p[2]);
+    return (+p[0])+"년 "+(+p[1])+"월 "+(+p[2])+"일 ("+DOW_KR[dt.getDay()]+")";
+  }
+
+  // ---- 상태 ----
+  var data = loadAll();
+  var now = new Date();
+  var viewY = now.getFullYear();
+  var viewM = now.getMonth(); // 0-based
+  var TODAY = todayKey();
+  var selectedMood = null;      // 오늘 선택 중인 감정
+  var previewKey = null;        // 달력에서 선택한 날
+
+  // ---- DOM ----
+  var $ = function(id){ return document.getElementById(id); };
+  var pickerEl = $("picker");
+  var memoEl = $("memo");
+  var memoCountEl = $("memoCount");
+  var saveBtn = $("saveBtn");
+  var savedNote = $("savedNote");
+  var calGrid = $("calGrid");
+  var monthLabel = $("monthLabel");
+  var preview = $("preview");
+  var toastEl = $("toast");
+
+  $("todayLabel").textContent = prettyDate(TODAY);
+
+  // ---- 토스트 ----
+  var toastTimer=null;
+  function toast(msg){
+    toastEl.textContent = msg;
+    toastEl.classList.add("show");
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(function(){ toastEl.classList.remove("show"); }, 1900);
+  }
+
+  // ---- 오늘 picker 빌드 ----
+  function buildPicker(){
+    pickerEl.innerHTML = "";
+    MOODS.forEach(function(m){
+      var b = document.createElement("button");
+      b.className = "mood-btn";
+      b.setAttribute("data-id", m.id);
+      b.setAttribute("type","button");
+      b.innerHTML =
+        '<span class="ic">'+icon(m.id,38)+'</span>'+
+        '<span class="nm">'+m.name+'</span>'+
+        '<span class="fe">'+m.feel+'</span>';
+      b.addEventListener("click", function(){ selectMood(m.id); });
+      pickerEl.appendChild(b);
+    });
+  }
+  function selectMood(id){
+    selectedMood = id;
+    Array.prototype.forEach.call(pickerEl.children, function(btn){
+      btn.classList.toggle("sel", btn.getAttribute("data-id")===id);
+    });
+    saveBtn.disabled = !selectedMood;
+  }
+
+  // ---- 오늘 기록 초기화(이미 저장된 경우 불러오기) ----
+  function initTodayForm(){
+    var rec = data[TODAY];
+    if(rec){
+      selectMood(rec.mood);
+      memoEl.value = rec.memo || "";
+      savedNote.textContent = "오늘 기록이 저장돼 있어요. 언제든 고칠 수 있어요.";
+      saveBtn.textContent = "오늘 기록 수정";
+    }else{
+      savedNote.textContent = "";
+      saveBtn.textContent = "오늘 기록 저장";
+    }
+    updateMemoCount();
+  }
+  function updateMemoCount(){ memoCountEl.textContent = memoEl.value.length; }
+
+  memoEl.addEventListener("input", updateMemoCount);
+
+  saveBtn.addEventListener("click", function(){
+    if(!selectedMood){ return; }
+    data[TODAY] = { mood:selectedMood, memo:memoEl.value.trim(), ts:Date.now() };
+    var ok = saveAll(data);
+    if(!ok){ toast("저장공간을 쓸 수 없어요 😢"); return; }
+    savedNote.textContent = "오늘 기록이 저장됐어요. 수고했어요!";
+    saveBtn.textContent = "오늘 기록 수정";
+    toast("오늘 날씨를 기록했어요");
+    // 오늘이 보고 있는 달에 있으면 달력/패턴 갱신
+    renderCalendar();
+    renderPattern();
+    // 미리보기가 오늘을 보고 있으면 갱신
+    if(previewKey===TODAY){ showPreview(TODAY); }
+  });
+
+  // ---- 달력 ----
+  function renderCalendar(){
+    monthLabel.textContent = viewY + "년 " + (viewM+1) + "월";
+    calGrid.innerHTML = "";
+    var first = new Date(viewY, viewM, 1);
+    var startDow = first.getDay(); // 0 일
+    var daysInMonth = new Date(viewY, viewM+1, 0).getDate();
+
+    // 앞 빈칸
+    for(var i=0;i<startDow;i++){
+      var e = document.createElement("div");
+      e.className = "cell empty";
+      calGrid.appendChild(e);
+    }
+    for(var d=1; d<=daysInMonth; d++){
+      var key = keyOf(viewY, viewM, d);
+      var rec = data[key];
+      var cell = document.createElement("div");
+      cell.className = "cell";
+      if(key===TODAY){ cell.classList.add("today"); }
+      if(rec){
+        cell.classList.add("has");
+        cell.style.background = MOOD_MAP[rec.mood].color;
+        cell.innerHTML = '<span class="daynum">'+d+'</span><span class="mini">'+icon(rec.mood,20)+'</span>';
+        (function(k){ cell.addEventListener("click", function(){ showPreview(k); }); })(key);
+      }else{
+        cell.classList.add("noentry");
+        cell.innerHTML = '<span class="daynum">'+d+'</span>';
+      }
+      if(key===previewKey){ cell.classList.add("sel"); }
+      calGrid.appendChild(cell);
+    }
+  }
+
+  function showPreview(key){
+    var rec = data[key];
+    previewKey = key;
+    if(!rec){ preview.classList.remove("show"); return; }
+    var m = MOOD_MAP[rec.mood];
+    $("pvIc").innerHTML = icon(rec.mood,34);
+    $("pvDate").textContent = prettyDate(key);
+    $("pvFeel").textContent = m.name + " · " + m.feel;
+    var mw = $("pvMemoWrap");
+    if(rec.memo){
+      mw.innerHTML = '<div class="pv-memo"></div>';
+      mw.querySelector(".pv-memo").textContent = rec.memo;
+    }else{
+      mw.innerHTML = '<div class="pv-nomemo">메모가 없는 날이에요.</div>';
+    }
+    // 오늘이면 수정 안내
+    var ew = $("pvEditWrap");
+    if(key===TODAY){
+      ew.innerHTML = '<button class="btn ghost" id="pvGoEdit" style="font-size:12.5px;padding:8px 12px;">위에서 오늘 기록 고치기</button>';
+      $("pvGoEdit").addEventListener("click", function(){
+        memoEl.scrollIntoView({behavior:"smooth", block:"center"});
+      });
+    }else{
+      ew.innerHTML = "";
+    }
+    preview.classList.add("show");
+    // 선택 표시 갱신
+    renderCalendar();
+  }
+
+  $("prevM").addEventListener("click", function(){
+    viewM--; if(viewM<0){ viewM=11; viewY--; }
+    preview.classList.remove("show"); previewKey=null;
+    renderCalendar(); renderPattern();
+  });
+  $("nextM").addEventListener("click", function(){
+    viewM++; if(viewM>11){ viewM=0; viewY++; }
+    preview.classList.remove("show"); previewKey=null;
+    renderCalendar(); renderPattern();
+  });
+
+  // ---- 패턴 ----
+  function renderPattern(){
+    var prefix = viewY + "-" + pad(viewM+1) + "-";
+    var counts = {};
+    MOODS.forEach(function(m){ counts[m.id]=0; });
+    var total = 0;
+    Object.keys(data).forEach(function(k){
+      if(k.indexOf(prefix)===0){
+        var mood = data[k].mood;
+        if(counts.hasOwnProperty(mood)){ counts[mood]++; total++; }
+      }
+    });
+    $("patSub").textContent = total>0 ? ("기록 "+total+"일") : "";
+    var body = $("patBody");
+    if(total===0){
+      body.innerHTML = '<div class="pat-empty">아직 이번 달 기록이 없어요.<br>오늘의 날씨부터 남겨볼까요?</div>';
+      return;
+    }
+    var max = 0;
+    MOODS.forEach(function(m){ if(counts[m.id]>max) max=counts[m.id]; });
+
+    var html = '<div class="pat-list">';
+    MOODS.forEach(function(m){
+      if(counts[m.id]===0) return;
+      var pct = max>0 ? Math.round(counts[m.id]/max*100) : 0;
+      html +=
+        '<div class="pat-row">'+
+          '<span class="pic">'+icon(m.id,26)+'</span>'+
+          '<div class="pbar-wrap"><div class="pbar" style="width:'+pct+'%;background:'+m.color+'"></div></div>'+
+          '<span class="pnum">'+m.name.slice(0,2)+' '+counts[m.id]+'일</span>'+
+        '</div>';
+    });
+    html += '</div>';
+    body.innerHTML = html;
+  }
+
+  // ---- 도구: 내보내기 / 초기화 ----
+  $("exportBtn").addEventListener("click", function(){
+    var payload = JSON.stringify(data, null, 2);
+    try{
+      var blob = new Blob([payload], {type:"application/json"});
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement("a");
+      a.href = url;
+      a.download = "감정날씨일기_"+TODAY+".json";
+      document.body.appendChild(a); a.click();
+      document.body.removeChild(a);
+      setTimeout(function(){ URL.revokeObjectURL(url); }, 1000);
+      toast("기록을 내보냈어요");
+    }catch(e){
+      toast("내보내기를 할 수 없어요");
+    }
+  });
+
+  $("resetBtn").addEventListener("click", function(){
+    if(!confirm("정말 모든 기록을 지울까요?\n이 작업은 되돌릴 수 없어요.")) return;
+    data = {};
+    saveAll(data);
+    selectedMood=null; previewKey=null;
+    preview.classList.remove("show");
+    Array.prototype.forEach.call(pickerEl.children, function(b){ b.classList.remove("sel"); });
+    memoEl.value=""; updateMemoCount();
+    saveBtn.disabled=true; saveBtn.textContent="오늘 기록 저장";
+    savedNote.textContent="";
+    renderCalendar(); renderPattern();
+    toast("모든 기록을 지웠어요");
+  });
+
+  // ---- 시작 ----
+  buildPicker();
+  initTodayForm();
+  renderCalendar();
+  renderPattern();
+
+  // 테스트 훅 (자동점검용) — 사용자 UI엔 영향 없음
+  window.__diary = {
+    getAll:function(){ return loadAll(); },
+    today:TODAY,
+    moods:MOODS.map(function(m){return m.id;})
+  };
+})();
+</script>
+</body>
+</html>
